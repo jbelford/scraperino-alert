@@ -31,17 +31,19 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-let bestBuyLink = 'https://www.bestbuy.com/site/computer-cards-components/video-graphics-cards/abcat0507002.c?id=abcat0507002&qp=gpusv_facet%3DGraphics%20Processing%20Unit%20(GPU)~NVIDIA%20GeForce%20RTX%203080';
+let bestBuyLink = 'https://www.bestbuy.com/site/searchpage.jsp?st=rtx+3080&_dyncharset=UTF-8&_dynSessConf=&id=pcat17071&type=page&sc=Global&cp=1&nrp=&sp=&qp=&list=n&af=true&iht=y&usc=All+Categories&ks=960&keys=keys';
 // bestBuyLink = 'https://www.bestbuy.com/site/searchpage.jsp?_dyncharset=UTF-8&id=pcat17071&iht=y&keys=keys&ks=960&list=n&qp=gpusv_facet%3DGraphics%20Processing%20Unit%20(GPU)~NVIDIA%20GeForce%20RTX%202070%20SUPER&sc=Global&st=graphics%20card&type=page&usc=All%20Categories';
 let newEggLink = 'https://www.newegg.com/p/pl?N=100007709%208000%20601357247&cm_sp=Cat_video-Cards_1-_-Visnav-_-Gaming-Video-Cards_1';
 // newEggLink = 'https://www.newegg.com/p/pl?d=rtx+2080&N=100007709&isdeptsrh=1';
+let cvsLink = 'https://www.cvs.com/immunizations/covid-19-vaccine?WT.ac=cvs-storelocator-covid-vaccine-searchpilot';
 
 let throttle = new Throttle(1000 * 60 * 5);
 
 (async () => {
-    const browser = await puppeteer.launch({ headless: false });
-    startPage(browser, bestBuyLink, 'BestBuy', [8, 10], checkBestBuy);
-    startPage(browser, newEggLink, 'NewEgg', [2, 3], checkNewEgg, false);
+    const browser = await puppeteer.launch({ headless: true });
+    // startPage(browser, bestBuyLink, 'BestBuy', [8, 10], checkBestBuy);
+    // startPage(browser, newEggLink, 'NewEgg', [2, 3], checkNewEgg, false);
+    startPage(browser, cvsLink, 'CVS', [30, 45, 60], checkCvs);
 })();
 
 async function startPage(browser, url, name, sleepTimers, checkFn, cache = true) {
@@ -80,7 +82,7 @@ async function checkBestBuyListing(elem) {
     if (typeof text === 'string' && text.match(/add\s+to\s+cart/i)) {
         const title = await elem.$('.sku-title .sku-header a');
         const href = await (await title.getProperty('href')).jsonValue();
-        sendEmail(href);
+        sendRtxEmail(href);
     }
 }
 
@@ -96,30 +98,66 @@ async function checkNewEggListing(elem) {
     if (typeof text === 'string' && text.match(/add\s+to\s+cart/i)) {
         const title = await elem.$('.item-info .item-title');
         const href = await (await title.getProperty('href')).jsonValue();
-        sendEmail(href);
+        sendRtxEmail(href);
     }
 }
 
-function sendEmail(href) {
-    if (throttle.has(href) || href === 'https://www.newegg.com/asus-geforce-rtx-3080-tuf-rtx3080-10g-gaming/p/N82E16814126453?Item=N82E16814126453&quicklink=true')
+/**
+ *
+ * @param {puppeteer.Page} page
+ */
+async function checkCvs(page) {
+    await page.reload({ waitUntil: 'networkidle2' });
+
+    // Click washington button
+    const elem = await page.$('a[data-analytics-name=Washington]');
+    await elem.click();
+
+    // Wait for modal to refresh then get info
+    await page.waitForSelector('div.modal__box#vaccineinfo-WA tbody tr');
+    const rows = await page.$$('div.modal__box#vaccineinfo-WA tbody tr');
+    const results = await Promise.all(rows.map(async row => {
+        return {
+            city: await getText(await row.$('.city')),
+            status: await getText(await row.$('.status'))
+        };
+    }));
+
+    // Send email for Seattle if not fully booked
+    const value = results.filter(r => r.city.toLowerCase() === 'seattle, wa')[0];
+    if (value.status != 'Fully Booked') {
+        sendEmail('CVS Vaccine Available', cvsLink);
+    }
+}
+
+function sendRtxEmail(href) {
+    sendEmail('New RTX 3080 available', href);
+}
+
+function sendEmail(subj, text) {
+    if (throttle.has(text) || text === 'https://www.newegg.com/asus-geforce-rtx-3080-tuf-rtx3080-10g-gaming/p/N82E16814126453?Item=N82E16814126453&quicklink=true')
         return;
-    throttle.set(href);
+    throttle.set(text);
 
     const mailOptions = {
-        from: 'joe425228@gmail.com',
+        from: process.env['3080User'],
         to: 'jackbelford12@live.ca',
-        subject: 'New RTX 3080 available',
-        text: href
+        subject: subj,
+        text: text
     };
     transporter.sendMail(mailOptions, (err, info) => {
         if (err) {
-            console.log(`Fuck I failed to send email: ${href}`);
+            console.log(`Fuck I failed to send email: ${text}`);
         } else {
-            console.log(`EMAIL HAS BEEN SENT FOR ${href}`);
+            console.log(`EMAIL HAS BEEN SENT FOR ${text}`);
         }
     });
 }
 
 function sleep(millis) {
     return new Promise(resolve => setTimeout(() => resolve(), millis));
+}
+
+function getText(elem) {
+    return elem.getProperty('textContent').then(text => text.jsonValue()).then(text => text.trim());
 }
