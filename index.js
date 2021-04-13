@@ -31,11 +31,12 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-let bestBuyLink = 'https://www.bestbuy.com/site/searchpage.jsp?st=rtx+3080&_dyncharset=UTF-8&_dynSessConf=&id=pcat17071&type=page&sc=Global&cp=1&nrp=&sp=&qp=&list=n&af=true&iht=y&usc=All+Categories&ks=960&keys=keys';
+let BEST_BUY_LINK = 'https://www.bestbuy.com/site/searchpage.jsp?st=rtx+3080&_dyncharset=UTF-8&_dynSessConf=&id=pcat17071&type=page&sc=Global&cp=1&nrp=&sp=&qp=&list=n&af=true&iht=y&usc=All+Categories&ks=960&keys=keys';
 // bestBuyLink = 'https://www.bestbuy.com/site/searchpage.jsp?_dyncharset=UTF-8&id=pcat17071&iht=y&keys=keys&ks=960&list=n&qp=gpusv_facet%3DGraphics%20Processing%20Unit%20(GPU)~NVIDIA%20GeForce%20RTX%202070%20SUPER&sc=Global&st=graphics%20card&type=page&usc=All%20Categories';
-let newEggLink = 'https://www.newegg.com/p/pl?N=100007709%208000%20601357247&cm_sp=Cat_video-Cards_1-_-Visnav-_-Gaming-Video-Cards_1';
+let NEW_EGG_LINK = 'https://www.newegg.com/p/pl?N=100007709%208000%20601357247&cm_sp=Cat_video-Cards_1-_-Visnav-_-Gaming-Video-Cards_1';
 // newEggLink = 'https://www.newegg.com/p/pl?d=rtx+2080&N=100007709&isdeptsrh=1';
-let cvsLink = 'https://www.cvs.com/immunizations/covid-19-vaccine?WT.ac=cvs-storelocator-covid-vaccine-searchpilot';
+let CVS_LINK = 'https://www.cvs.com/immunizations/covid-19-vaccine?WT.ac=cvs-storelocator-covid-vaccine-searchpilot';
+let MVS_LINK = 'https://seattle.signetic.com/home';
 
 let throttle = new Throttle(1000 * 60 * 5);
 
@@ -43,7 +44,8 @@ let throttle = new Throttle(1000 * 60 * 5);
     const browser = await puppeteer.launch({ headless: true });
     // startPage(browser, bestBuyLink, 'BestBuy', [8, 10], checkBestBuy);
     // startPage(browser, newEggLink, 'NewEgg', [2, 3], checkNewEgg, false);
-    startPage(browser, cvsLink, 'CVS', [30, 45, 60], checkCvs);
+    startPage(browser, CVS_LINK, 'CVS', [30, 45, 60], checkCvs);
+    startPage(browser, MVS_LINK, 'Seattle', [30, 45, 60], checkSeattleMvs, false);
 })();
 
 async function startPage(browser, url, name, sleepTimers, checkFn, cache = true) {
@@ -126,8 +128,26 @@ async function checkCvs(page) {
     // Send email for Seattle if not fully booked
     const value = results.filter(r => r.city.toLowerCase() === 'seattle, wa')[0];
     if (value.status != 'Fully Booked') {
-        sendEmail('CVS Vaccine Available', cvsLink);
+        sendEmail('CVS Vaccine Available', CVS_LINK);
     }
+}
+
+/**
+ *
+ * @param {puppeteer.Page} page
+ */
+async function checkSeattleMvs(page) {
+    await page.reload({ waitUntil: 'networkidle2' });
+
+    const noApptAvail = await page.$('.empty-clinic .empty-title');
+    if (noApptAvail) {
+        const text = await getText(noApptAvail);
+        if (text.toLowerCase() === 'no appointments available') {
+            return;
+        }
+    }
+
+    sendEmail('Seattle Vaccine Signup Available', MVS_LINK);
 }
 
 function sendRtxEmail(href) {
