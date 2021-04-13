@@ -9,6 +9,12 @@ function getEnv(name) {
     return process.env[name];
 }
 
+/**
+ * Convert a comma separated list environment variable into an array
+ *
+ * @param {string} name
+ * @returns {string[]}
+ */
 function getEnvList(name) {
     return (process.env[name] || '').split(',').map(x => x.trim());
 }
